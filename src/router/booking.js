@@ -29,13 +29,25 @@ router.post('/hotel/:city', async (req, res) => {
 router.post('/booking', async (req, res) => {
     try {
         const booking = req.body
+        booking.entryDate = Date.now()
+        booking.entryDate = dateFormat(booking.entryDate)
         booking.dateOut = new Date(booking.dateIn)
         booking.dateOut.setDate(booking.dateOut.getDate() + booking.stayDay)
         booking.dateOut = booking.dateOut.toDateString("yyyy-MM-dd")
         booking.dateOut = dateFormat(booking.dateOut)
-        delete booking.stayDay
         console.log(booking)
-
+        const dateCondition = `(("${booking.dateOut}" > booking.dateIn and   "${booking.dateOut}" <= booking.dateOut)  or ( "${booking.dateIn}" >= booking.dateIn  and "${req.body.dateIn}" < booking.dateOut)) or ("${req.body.dateIn}" <= booking.dateIn and "${req.body.dateOut}" >= booking.dateOut)`
+        const q1 = `SELECT sum(qtyRooms)  as booked FROM booking Where hotelId=${booking.hotelId} and ${dateCondition}`
+        const q2 = `SELECT qtyRooms, rentPerRoomPerDay FROM rooms WHERE hotelId=${booking.hotelId}`
+        console.log(q1, q2)
+        const resultQ1 = await db.promise().query(q1)
+        const resultQ2 = await db.promise().query(q2);
+        //console.log(resultQ1)
+        if (resultQ1[0][0].booked + booking.qtyRooms > resultQ2[0][0].qtyRooms) {
+            return res.status(400).send("Suffecient room is not available for booking")
+        }
+        booking.rent = booking.qtyRooms * resultQ2[0][0].rentPerRoomPerDay * booking.stayDay
+        delete booking.stayDay
         const query = "INSERT INTO booking SET ?"
         db.query(query, booking, (err, result) => {
             if (err) {
@@ -45,20 +57,6 @@ router.post('/booking', async (req, res) => {
         })
     } catch (err) {
         res.status(500).send("server error")
-    }
-})
-
-router.post('/user/login', async (req, res) => {
-    try {
-        const query = `SELECT * FROM user WHERE emailId = "${req.body.emailId}"`
-        const user = await db.promise().query(query)
-        const isMatch = await bcrypt.compare(req.body.password, user[0][0].password)
-        if (!isMatch) {
-            return res.status(400).send({ error: "kill him" })
-        }
-        res.status(200).send("kill")
-    } catch (err) {
-        res.status(500).send("Server error")
     }
 })
 
